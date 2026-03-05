@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Question</title>
+</head>
+<body>
+
+<h3>Time Remaining: <span id="timer"></span></h3>
+
+<h2>{{ question.question_text }}</h2>
+
+<form method="get" action="/submit-answer/{{ test.id }}/{{ question.id }}/">
+
+    <input type="radio" name="option" value="a"> {{ question.option_a }} <br><br>
+    <input type="radio" name="option" value="b"> {{ question.option_b }} <br><br>
+    <input type="radio" name="option" value="c"> {{ question.option_c }} <br><br>
+    <input type="radio" name="option" value="d"> {{ question.option_d }} <br><br>
+
+    <button type="submit">Submit Answer</button>
+
+</form>
+
+
+<script>
+
+let duration = Number("{{ duration|default:60 }}") * 60;
+let startTime = Number("{{ start_time }}");
+
+let now = Math.floor(Date.now() / 1000);
+let elapsed = Math.floor(now - startTime);
+
+let remaining = duration - elapsed;
+
+let display = document.getElementById("timer");
+
+let countdown = setInterval(function () {
+
+    if (remaining <= 0) {
+
+        clearInterval(countdown);
+        alert("Time is up! Submitting test.");
+        window.location.href = "/finish-test/{{ test.id }}/";
+        return;
+
+    }
+
+    let minutes = Math.floor(remaining / 60);
+    let seconds = Math.floor(remaining % 60);
+
+    display.textContent =
+        minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
+
+    remaining--;
+
+}, 1000);
+
+</script>
+
+</body>
+</html>

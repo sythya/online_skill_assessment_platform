@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Online Skill Assessment</title>
+</head>
+<body>
+
+{% if error %}
+  <p style="color: red; font-weight: bold;">
+    {{ error }}
+  </p>
+{% endif %}
+
+<h2>Online Skill Assessment</h2>
+
+<!-- Timer -->
+<h3>Time Remaining: <span id="timer"></span></h3>
+
+<form method="post" id="examForm">
+    {% csrf_token %}
+
+    <input type="hidden" id="duration" value="{{ test.duration_minutes }}">
+
+    {% for question in questions %}
+        <p>
+            <strong>{{ forloop.counter }}. {{ question.question_text }}</strong>
+        </p>
+
+        <label>
+            <input type="radio" name="q{{ question.id }}" value="a">
+            {{ question.option_a }}
+        </label>
+        <br>
+
+        <label>
+            <input type="radio" name="q{{ question.id }}" value="b">
+            {{ question.option_b }}
+        </label>
+        <br>
+
+        <label>
+            <input type="radio" name="q{{ question.id }}" value="c">
+            {{ question.option_c }}
+        </label>
+        <br>
+
+        <label>
+            <input type="radio" name="q{{ question.id }}" value="d">
+            {{ question.option_d }}
+        </label>
+        <br>
+
+        <hr>
+    {% endfor %}
+
+    <button type="submit">Submit Test</button>
+
+</form>
+
+<!-- Timer Script -->
+<script>
+
+let duration = document.getElementById("duration").value * 60; // convert minutes to seconds
+let display = document.getElementById("timer");
+
+function startTimer() {
+
+    let timer = duration;
+
+    let interval = setInterval(function () {
+
+        let minutes = Math.floor(timer / 60);
+        let seconds = timer % 60;
+
+        minutes = minutes < 10 ? "0" + minutes : minutes;
+        seconds = seconds < 10 ? "0" + seconds : seconds;
+
+        display.textContent = minutes + ":" + seconds;
+
+        if (--timer < 0) {
+
+            clearInterval(interval);
+
+            alert("Time is up! Submitting your test.");
+
+            document.getElementById("examForm").submit();
+        }
+
+    }, 1000);
+}
+
+window.onload = startTimer;
+
+</script>
+
+</body>
+</html>

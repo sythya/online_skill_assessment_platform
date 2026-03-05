@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Result</title>
+</head>
+<body>
+
+<h1>Test Completed</h1>
+
+<h2>Score: {{ result.score }} / {{ result.total_questions }}</h2>
+<h3>Accuracy: {{ result.accuracy }}%</h3>
+
+<hr>
+
+<h3>Skill Performance</h3>
+<ul>
+{% for skill, data in result.skill_breakdown.items %}
+    <li>{{ skill }} : {{ data.correct }} / {{ data.total }}</li>
+{% endfor %}
+</ul>
+
+<hr>
+
+<h3>Difficulty Performance</h3>
+<ul>
+{% for diff, data in result.difficulty_breakdown.items %}
+    <li>{{ diff }} : {{ data.correct }} / {{ data.total }}</li>
+{% endfor %}
+</ul>
+
+</body>
+</html>

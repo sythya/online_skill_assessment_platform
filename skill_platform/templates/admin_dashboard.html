@@ -1,0 +1,19 @@
+<h1>Admin Dashboard</h1>
+
+<h2>Platform Metrics</h2>
+<p>Total Tests: {{ total_tests }}</p>
+<p>Total Attempts: {{ total_attempts }}</p>
+<p>Completed Tests: {{ completed_tests }}</p>
+<p>Average Accuracy: {{ avg_accuracy }}%</p>
+<p>Completion Rate: {{ completion_rate }}%</p>
+
+<h2>Skill Insights</h2>
+<p>Strongest Skill: {{ most_tested_skill }}</p>
+<p>Weakest Skill: {{ weakest_skill }}</p>
+
+<h2>Top Candidates</h2>
+<ul>
+{% for candidate in top_candidates %}
+    <li>{{ candidate.user__username }} - {{ candidate.avg_score|floatformat:2 }}%</li>
+{% endfor %}
+</ul>

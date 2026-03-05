@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Analytics</title>
+</head>
+<body>
+
+<h2>Analytics Report</h2>
+
+<p><strong>Total Attempts:</strong> {{ total_attempts }}</p>
+<p><strong>Average Score:</strong> {{ average_score }}</p>
+
+<h3>Attempt History</h3>
+
+<ul>
+    {% for attempt in attempts %}
+        <li>
+            Score: {{ attempt.score }} /
+            {{ attempt.total_questions }}
+            — {{ attempt.created_at }}
+        </li>
+    {% empty %}
+        <li>No attempts found.</li>
+    {% endfor %}
+</ul>
+
+</body>
+</html>

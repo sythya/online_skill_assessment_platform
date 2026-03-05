@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Candidate Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+<h1>Candidate Dashboard</h1>
+
+<h2>Overview</h2>
+
+<p>Total Tests Taken: {{ total_tests }}</p>
+<p>Average Accuracy: {{ avg_accuracy }}%</p>
+<p>Best Score: {{ best_score }}%</p>
+<p>Most Recent Score: {{ recent_score }}%</p>
+
+<h2>Skill Performance</h2>
+
+<ul>
+{% for skill, accuracy in skill_summary.items %}
+<li>{{ skill }} - {{ accuracy }}%</li>
+{% endfor %}
+</ul>
+
+<p>Strongest Skill: {{ strongest_skill }}</p>
+<p>Weakest Skill: {{ weakest_skill }}</p>
+
+<div style="display:flex; gap:40px;">
+
+    <div style="width:500px;">
+        <h3>Skill Performance</h3>
+        <canvas id="skillChart"></canvas>
+    </div>
+
+    <div style="width:400px;">
+        <h3>Difficulty Performance</h3>
+        <canvas id="difficultyChart"></canvas>
+    </div>
+
+</div>
+
+<script>
+
+const skillLabels = JSON.parse('{{ skill_chart_labels|escapejs }}');
+const skillValues = JSON.parse('{{ skill_chart_values|escapejs }}');
+
+new Chart(document.getElementById("skillChart"), {
+    type: "bar",
+    data: {
+        labels: skillLabels,
+        datasets: [{
+            label: "Skill Accuracy %",
+            data: skillValues
+        }]
+    }
+});
+
+const difficultyLabels = JSON.parse('{{ difficulty_chart_labels|escapejs }}');
+const difficultyValues = JSON.parse('{{ difficulty_chart_values|escapejs }}');
+
+new Chart(document.getElementById("difficultyChart"), {
+    type: "pie",
+    data: {
+        labels: difficultyLabels,
+        datasets: [{
+            label: "Difficulty Accuracy %",
+            data: difficultyValues
+        }]
+    }
+});
+
+</script>
+
+</body>
+</html>
+

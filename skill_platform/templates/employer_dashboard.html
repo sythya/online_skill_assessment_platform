@@ -1,0 +1,111 @@
+<h1>Employer Dashboard</h1>
+
+
+<p>Welcome {{ request.user.username }}</p>
+
+<a href="{% url 'employer_results' %}">
+<button>View Candidate Results</button>
+</a>
+
+<br><br>
+
+{% if message %}
+<p style="color:green;">{{ message }}</p>
+{% endif %}
+
+<h2>Create Assessment</h2>
+
+<form method="POST">
+{% csrf_token %}
+
+<label>Select Blueprint</label><br>
+<select name="blueprint">
+{% for blueprint in blueprints %}
+<option value="{{ blueprint.id }}">
+{{ blueprint.name }}
+</option>
+{% endfor %}
+</select>
+
+<br><br>
+
+<label>Select Candidate</label><br>
+<select name="candidate">
+{% for candidate in candidates %}
+<option value="{{ candidate.id }}">
+{{ candidate.username }}
+</option>
+{% endfor %}
+</select>
+
+<br><br>
+
+<label>Test Start Time</label><br>
+<input type="datetime-local" name="start_time">
+
+<br><br>
+
+<label>Duration (minutes)</label><br>
+<input type="number" name="duration" value="60">
+
+<br><br>
+
+<button type="submit">Assign Test</button>
+
+</form>
+
+<hr>
+
+<h2>Assigned Tests</h2>
+
+<table border="1" cellpadding="8">
+
+<tr>
+<th>Candidate</th>
+<th>Blueprint</th>
+<th>Status</th>
+<th>Assigned At</th>
+</tr>
+
+{% for test in tests %}
+
+<tr>
+<td>{{ test.user.username }}</td>
+<td>{{ test.blueprint.name }}</td>
+
+<td>
+{% if test.is_completed %}
+Completed
+{% else %}
+Pending
+{% endif %}
+</td>
+
+<td>{{ test.started_at }}</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+<h2>Live Test Monitoring</h2>
+
+<table border="1">
+<tr>
+<th>Candidate</th>
+<th>Test</th>
+<th>Status</th>
+<th>Time Left</th>
+</tr>
+
+{% for item in monitor_data %}
+<tr>
+<td>{{ item.candidate }}</td>
+<td>{{ item.test }}</td>
+<td>{{ item.status }}</td>
+<td>{{ item.time_left }}</td>
+</tr>
+{% endfor %}
+</table>
+
