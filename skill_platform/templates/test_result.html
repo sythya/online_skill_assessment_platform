@@ -7,24 +7,46 @@
 
 <h1>Test Completed</h1>
 
-<h2>Score: {{ result.score }} / {{ result.total_questions }}</h2>
+<h2>Score: {{ result.score }} / {{ result.total }}</h2>
+
+<p><strong>Correct:</strong> {{ result.correct }}</p>
+<p><strong>Wrong:</strong> {{ result.wrong }}</p>
+<p><strong>Unattempted:</strong> {{ result.unattempted }}</p>
+
 <h3>Accuracy: {{ result.accuracy }}%</h3>
+
+{% if result.warnings > 0 %}
+<hr>
+<h3>Proctoring Report</h3>
+<p><strong>Warnings Triggered:</strong> {{ result.warnings }}</p>
+
+{% if result.warnings >= 3 %}
+<p style="color:red;"><strong>Exam Auto-Submitted due to Proctoring Violations</strong></p>
+{% endif %}
+
+{% endif %}
 
 <hr>
 
-<h3>Skill Performance</h3>
+<h3>Skill-wise Performance</h3>
 <ul>
 {% for skill, data in result.skill_breakdown.items %}
-    <li>{{ skill }} : {{ data.correct }} / {{ data.total }}</li>
+<li>
+{{ skill }} → {{ data.correct }} / {{ data.total }}
+({% widthratio data.correct data.total 100 %}%)
+</li>
 {% endfor %}
 </ul>
 
 <hr>
 
-<h3>Difficulty Performance</h3>
+<h3>Difficulty-wise Performance</h3>
 <ul>
 {% for diff, data in result.difficulty_breakdown.items %}
-    <li>{{ diff }} : {{ data.correct }} / {{ data.total }}</li>
+<li>
+{{ diff }} → {{ data.correct }} / {{ data.total }}
+({% widthratio data.correct data.total 100 %}%)
+</li>
 {% endfor %}
 </ul>
 

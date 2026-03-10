@@ -105,7 +105,10 @@ def submit_answer(user, test, question, selected_option):
     if Answer.objects.filter(attempt=attempt, question=question).exists():
         raise TestEngineError("Question already answered.")
 
-    is_correct = selected_option.lower() == question.correct_option.lower()
+    if not selected_option:
+        is_correct = False
+    else:
+        is_correct = selected_option.lower() == question.correct_option.lower()
 
     # ✅ Store answer (NOT Attempt)
     answer = Answer.objects.create(

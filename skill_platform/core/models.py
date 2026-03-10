@@ -235,3 +235,29 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.role}"
+
+
+class CandidateActivity(models.Model):
+    attempt = models.ForeignKey(Attempt, on_delete=models.CASCADE)
+    activity_type = models.CharField(max_length=50)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.attempt.user} - {self.activity_type}"
+    
+
+class WebcamCapture(models.Model):
+    attempt = models.ForeignKey(
+        Attempt,
+        on_delete=models.CASCADE,
+        related_name="webcam_captures"
+    )
+
+    image = models.ImageField(upload_to="webcam/")
+
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.attempt.user.username} - Webcam Frame - {self.timestamp}"
+    
+

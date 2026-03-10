@@ -1,6 +1,5 @@
 <h1>Employer Dashboard</h1>
 
-
 <p>Welcome {{ request.user.username }}</p>
 
 <a href="{% url 'employer_results' %}">
@@ -10,8 +9,12 @@
 <br><br>
 
 {% if message %}
-<p style="color:green;">{{ message }}</p>
+<p id="successMessage" style="color:green;font-weight:bold;">
+{{ message }}
+</p>
 {% endif %}
+
+<hr>
 
 <h2>Create Assessment</h2>
 
@@ -65,6 +68,7 @@
 <th>Blueprint</th>
 <th>Status</th>
 <th>Assigned At</th>
+<th>Action</th>
 </tr>
 
 {% for test in tests %}
@@ -83,29 +87,66 @@ Pending
 
 <td>{{ test.started_at }}</td>
 
+<td>
+{% if test.is_completed %}
+<a href="{% url 'candidate_report' test.id %}">
+View Report
+</a>
+{% else %}
+-
+{% endif %}
+</td>
+
 </tr>
 
 {% endfor %}
 
 </table>
 
+<hr>
+
 <h2>Live Test Monitoring</h2>
 
-<table border="1">
+<table border="1" cellpadding="8">
+
 <tr>
 <th>Candidate</th>
 <th>Test</th>
 <th>Status</th>
+<th>Score</th>
+<th>Warnings</th>
 <th>Time Left</th>
 </tr>
 
 {% for item in monitor_data %}
+
 <tr>
 <td>{{ item.candidate }}</td>
 <td>{{ item.test }}</td>
 <td>{{ item.status }}</td>
+<td>{{ item.score }}</td>
+<td>{{ item.warnings }}</td>
 <td>{{ item.time_left }}</td>
 </tr>
+
 {% endfor %}
+
 </table>
+
+<script>
+
+// Auto refresh monitoring every 5 seconds
+setInterval(function(){
+
+let activeElement = document.activeElement;
+
+if(activeElement.tagName !== "INPUT" && activeElement.tagName !== "SELECT"){
+
+location.reload();
+
+}
+
+},5000);
+
+</script>
 

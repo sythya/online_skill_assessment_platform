@@ -1,10 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Not Started</title>
+</head>
+
+<body>
+
 <h2>Test Not Started Yet</h2>
 
-<p>
-This test will start at:
+<p>Your test will start at:</p>
+
 <strong>{{ start_time }}</strong>
-</p>
 
-<p>Please come back at the scheduled time.</p>
+<h3>Time Remaining: <span id="timer"></span></h3>
 
-<a href="{% url 'candidate_dashboard' %}">Back to Dashboard</a>
+<script>
+
+let startTime = new Date("{{ start_time|date:'Y-m-d H:i:s' }}").getTime();
+
+let timerElement = document.getElementById("timer");
+
+let countdown = setInterval(function(){
+
+    let now = new Date().getTime();
+
+    let remaining = startTime - now;
+
+    if (remaining <= 0){
+        clearInterval(countdown);
+
+        // reload page to start test
+        location.reload();
+    }
+
+    let minutes = Math.floor((remaining / 1000) / 60);
+    let seconds = Math.floor((remaining / 1000) % 60);
+
+    timerElement.innerHTML = minutes + "m " + seconds + "s";
+
+}, 1000);
+
+</script>
+
+</body>
+</html>

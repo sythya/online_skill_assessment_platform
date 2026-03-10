@@ -21,6 +21,8 @@ urlpatterns = [
     path('finish-test/<int:test_id>/', views.finish_test, name='finish_test'),
     path('result/<int:test_id>/', views.view_result, name='view_result'),
 
+    path("log-activity/", views.log_activity, name="log_activity"),
+
     path("invite/<str:token>/", views.accept_invitation, name="accept_invitation"),
 
     # ADMIN DASHBOARD
@@ -34,4 +36,11 @@ urlpatterns = [
 
     # EMPLOYER RESULT VIEW
     path("employer/results/", views.employer_results, name="employer_results"),
+    
+    # EMPLOYER CANDIDATE REPORT
+    path("employer/candidate-report/<int:test_id>/", views.candidate_report, name="candidate_report"),
+
+    # Webcam monitoring endpoint
+    path("save-webcam-frame/", views.save_webcam_frame, name="save_webcam_frame"),
+
 ]

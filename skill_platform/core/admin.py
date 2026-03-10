@@ -19,6 +19,7 @@ from .models import (
     Attempt,
     Answer,
     Result,
+    WebcamCapture,
 )
 
 
@@ -196,3 +197,8 @@ class TestInvitationAdmin(admin.ModelAdmin):
     )
     list_filter = ("is_used", "invited_at")
     search_fields = ("candidate__username", "token")
+
+
+@admin.register(WebcamCapture)
+class WebcamCaptureAdmin(admin.ModelAdmin):
+    list_display = ("attempt", "image", "timestamp")

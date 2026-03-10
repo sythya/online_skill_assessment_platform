@@ -13,7 +13,7 @@ from collections import defaultdict
 import uuid
 from django.utils import timezone
 from django.db import transaction
-from core.models import Test, Attempt, Answer, Result, TestQuestion
+from core.models import Test, Attempt, Answer, Result, TestQuestion, WebcamCapture
 from django.contrib.auth import authenticate, login
 from django.core.mail import send_mail
 
@@ -200,7 +200,8 @@ def assessment(request):
 
     return render(request, "assessment.html", {
         "questions": questions,
-        "test": test
+        "test": test,
+        "attempt": attempt
     })
 
 
@@ -284,7 +285,7 @@ def start_test(request, blueprint_id):
     if now < start_time:
         return JsonResponse({"error": "Test has not started yet."}, status=403)
 
-    if now > end_time:
+    if now >= end_time:
         return JsonResponse({"error": "Test has expired."}, status=403)
 
     attempt, created = Attempt.objects.get_or_create(
@@ -301,7 +302,15 @@ def start_test(request, blueprint_id):
 @login_required
 def get_next_question(request, test_id):
 
+    from django.utils import timezone
+
     test = get_object_or_404(Test, id=test_id, user=request.user)
+
+    # Check if test expired
+    now = timezone.now()
+
+    if test.scheduled_end and now >= test.scheduled_end:
+        return redirect(f"/finish-test/{test.id}/")
 
     attempt = Attempt.objects.filter(
         user=request.user,
@@ -322,17 +331,19 @@ def get_next_question(request, test_id):
         question_id__in=answered_questions
     ).first()
 
+    # No more questions → finish test
     if not next_tq:
         return redirect(f"/finish-test/{test.id}/")
 
     q = next_tq.question
 
     return render(request, "question.html", {
-    "test": test,
-    "question": q,
-    "duration": test.duration_minutes,
-    "start_time": attempt.started_at.timestamp()
-})
+        "test": test,
+        "question": q,
+        "attempt": attempt,
+        "duration": test.duration_minutes,
+        "start_time": attempt.started_at.timestamp()
+    })
 
 from core.services.test_engine import TestEngineError
 
@@ -361,8 +372,11 @@ def submit_answer_view(request, test_id, question_id):
         return JsonResponse({"error": str(e)}, status=400)
 
 
+
+
 @login_required
 def finish_test(request, test_id):
+
     test = get_object_or_404(Test, id=test_id, user=request.user)
 
     attempt = Attempt.objects.filter(
@@ -374,11 +388,48 @@ def finish_test(request, test_id):
     if not attempt:
         return JsonResponse({"error": "No active session"}, status=400)
 
-    result = finalize_test(attempt)
+    answers = Answer.objects.filter(attempt=attempt)
+
+    total_questions = TestQuestion.objects.filter(test=test).count()
+
+    correct = answers.filter(is_correct=True).count()
+    attempted = answers.count()
+
+    wrong = attempted - correct
+    unattempted = total_questions - attempted
+
+    accuracy = 0
+    if total_questions > 0:
+        accuracy = round((correct / total_questions) * 100, 2)
+
+    # Count proctoring violations (limit to 3)
+    warning_count = min(
+        CandidateActivity.objects.filter(attempt=attempt).count(),
+        3
+    )
+
+    attempt.is_completed = True
+    attempt.completed_at = timezone.now()
+    attempt.save()
+
+    test.is_completed = True
+    test.completed_at = timezone.now()
+    test.save()
+
+    result = {
+        "score": correct,
+        "total": total_questions,
+        "correct": correct,
+        "wrong": wrong,
+        "unattempted": unattempted,
+        "accuracy": accuracy,
+        "warnings": warning_count
+        
+    }
 
     return render(request, "test_result.html", {
-    "result": result
-})
+        "result": result
+    })
 
 
 @login_required
@@ -532,6 +583,9 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 
+from datetime import datetime, timedelta
+from django.utils import timezone
+
 @login_required
 def employer_dashboard(request):
 
@@ -546,7 +600,6 @@ def employer_dashboard(request):
 
     tests = Test.objects.select_related("user", "blueprint").order_by("-scheduled_start")
 
-    message = None
     message = request.session.pop("success_message", None)
 
     if request.method == "POST":
@@ -559,8 +612,10 @@ def employer_dashboard(request):
         blueprint = TestBlueprint.objects.get(id=blueprint_id)
         candidate = User.objects.get(id=candidate_id)
 
+        # -------------------------------------------------
+        # CHECK ACTIVE TEST (only Test table)
+        # -------------------------------------------------
 
-        # Prevent multiple active tests
         existing_test = Test.objects.filter(
             user=candidate,
             is_completed=False
@@ -568,30 +623,64 @@ def employer_dashboard(request):
 
         if existing_test:
             message = "This candidate already has an active test."
+
             return render(request, "employer_dashboard.html", {
                 "blueprints": blueprints,
                 "candidates": candidates,
                 "tests": tests,
+                "monitor_data": [],
                 "message": message
             })
 
+        # -------------------------------------------------
         # SECURITY CHECK
+        # -------------------------------------------------
+
         if candidate.userprofile.role != "candidate":
             message = "Invalid user selected. Only candidates can be assigned tests."
+
             return render(request, "employer_dashboard.html", {
                 "blueprints": blueprints,
                 "candidates": candidates,
                 "tests": tests,
+                "monitor_data": [],
                 "message": message
             })
 
-        # Convert start time safely
-        scheduled_start = parse_datetime(start_time)
+        # -------------------------------------------------
+        # VALIDATE START TIME
+        # -------------------------------------------------
 
-        # Calculate end time
+        if not start_time:
+            message = "Please select a start time."
+
+            return render(request, "employer_dashboard.html", {
+                "blueprints": blueprints,
+                "candidates": candidates,
+                "tests": tests,
+                "monitor_data": [],
+                "message": message
+            })
+
+        scheduled_start = timezone.make_aware(datetime.fromisoformat(start_time))
+
+        if scheduled_start < timezone.now():
+            message = "Start time cannot be in the past."
+
+            return render(request, "employer_dashboard.html", {
+                "blueprints": blueprints,
+                "candidates": candidates,
+                "tests": tests,
+                "monitor_data": [],
+                "message": message
+            })
+
         scheduled_end = scheduled_start + timedelta(minutes=duration)
 
-        # Create test
+        # -------------------------------------------------
+        # CREATE TEST
+        # -------------------------------------------------
+
         test = Test.objects.create(
             blueprint=blueprint,
             user=candidate,
@@ -603,7 +692,10 @@ def employer_dashboard(request):
         # Generate questions
         generate_test_questions(test)
 
-        # Create invitation token
+        # -------------------------------------------------
+        # CREATE INVITATION LINK
+        # -------------------------------------------------
+
         token = uuid.uuid4().hex
 
         TestInvitation.objects.create(
@@ -613,72 +705,80 @@ def employer_dashboard(request):
         )
 
         invitation_link = request.build_absolute_uri(f"/invite/{token}/")
+
+        # -------------------------------------------------
+        # SEND EMAIL
+        # -------------------------------------------------
+
         from django.core.mail import send_mail
 
-        # Send invitation email
         send_mail(
             subject="Online Assessment Invitation",
             message=f"""
-        Hello {candidate.username},
+Hello {candidate.username},
 
-        You have been invited to attend an online assessment.
+You have been invited to attend an online assessment.
 
-        Test: {blueprint.name}
+Test: {blueprint.name}
 
-        Click the link below to start your test:
-        {invitation_link}
+Click the link below to start your test:
+{invitation_link}
 
-        Please complete the test within the scheduled time.
-
-        Best regards,
-        Assessment Platform
-        """,
+Best regards,
+Assessment Platform
+""",
             from_email=None,
             recipient_list=[candidate.email],
             fail_silently=False,
         )
 
-        request.session["success_message"] = "Test assigned successfully. Invitation email sent to the candidate."
+        request.session["success_message"] = "Test assigned successfully. Invitation link sent to candidate email."
         return redirect("employer_dashboard")
 
-    # -----------------------------
-    # LIVE TEST MONITORING
-    # -----------------------------
+    # -------------------------------------------------
+    # LIVE TEST MONITORING (ACTIVE ATTEMPTS ONLY)
+    # -------------------------------------------------
 
     monitor_data = []
 
-    for test in tests:
+    active_attempts = Attempt.objects.filter(
+        is_completed=False
+    ).select_related("test", "user")
 
-        attempt = Attempt.objects.filter(
-            test=test,
-            is_completed=False
-        ).first()
+    for attempt in active_attempts:
 
-        status = "Not Started"
-        time_left = "-"
+        test = attempt.test
 
-        if attempt:
+        status = "In Progress"
 
-            status = "In Progress"
+        # live score
+        score = Answer.objects.filter(
+            attempt=attempt,
+            is_correct=True
+        ).count()
 
-            elapsed = (timezone.now() - attempt.started_at).total_seconds()
-            remaining = (test.duration_minutes * 60) - elapsed
+        # warning count
+        warnings = CandidateActivity.objects.filter(
+            attempt=attempt
+        ).count()
 
-            if remaining > 0:
-                minutes = int(remaining // 60)
-                seconds = int(remaining % 60)
-                time_left = f"{minutes}:{seconds:02d}"
-            else:
-                time_left = "Time Expired"
+        # calculate remaining time
+        elapsed = (timezone.now() - attempt.started_at).total_seconds()
+        remaining = (test.duration_minutes * 60) - elapsed
 
-        if test.is_completed:
-            status = "Completed"
-            time_left = "-"
+        if remaining > 0:
+            minutes = int(remaining // 60)
+            seconds = int(remaining % 60)
+            time_left = f"{minutes}:{seconds:02d}"
+        else:
+            time_left = "Expired"
 
         monitor_data.append({
-            "candidate": test.user.username,
+            "candidate": attempt.user.username,
             "test": test.blueprint.name,
             "status": status,
+            "score": score,
+            "warnings": warnings,
             "time_left": time_left
         })
 
@@ -740,7 +840,13 @@ def accept_invitation(request, token):
         })
 
     # Test expired
-    if test.scheduled_end and now > test.scheduled_end:
+    if test.scheduled_end and now >= test.scheduled_end:
+        return render(request, "invitation_error.html", {
+            "message": "This test has expired."
+        })
+    
+    # Prevent starting expired test even if attempt already exists
+    if test.scheduled_end and timezone.now() >= test.scheduled_end:
         return render(request, "invitation_error.html", {
             "message": "This test has expired."
         })
@@ -755,7 +861,7 @@ def accept_invitation(request, token):
     invitation.is_used = True
     invitation.save()
 
-    return redirect("question_view", test_id=test.id)
+    return redirect("get_next_question", test_id=test.id)
 
 
 @login_required
@@ -772,3 +878,130 @@ def employer_results(request):
     return render(request, "employer_results.html", {
         "results": results
     })
+
+
+from .models import CandidateActivity, WebcamCapture
+from django.views.decorators.csrf import csrf_exempt
+
+
+@csrf_exempt
+def log_activity(request):
+
+    if request.method == "POST":
+
+        try:
+            data = json.loads(request.body)
+
+            attempt_id = data.get("attempt_id")
+            activity_type = data.get("activity_type")
+
+            if not attempt_id or not activity_type:
+                return JsonResponse({"error": "Missing data"}, status=400)
+
+            attempt = Attempt.objects.get(id=attempt_id)
+
+            CandidateActivity.objects.create(
+                attempt=attempt,
+                activity_type=activity_type
+            )
+
+            warning_count = min(
+                CandidateActivity.objects.filter(attempt=attempt).count(),
+                3
+            )
+
+            return JsonResponse({
+                "status": "recorded",
+                "warnings": warning_count
+            })
+
+        except Attempt.DoesNotExist:
+            return JsonResponse({"error": "Invalid attempt"}, status=404)
+
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({"message": "Proctoring endpoint ready"})
+
+
+@login_required
+def candidate_report(request, test_id):
+
+    test = get_object_or_404(Test, id=test_id)
+
+    attempt = Attempt.objects.filter(test=test).first()
+
+    if not attempt:
+        return render(request, "candidate_report.html", {
+            "candidate": test.user.username,
+            "test": test.blueprint.name,
+            "score": 0,
+            "total": 0,
+            "accuracy": 0,
+            "correct": 0,
+            "wrong": 0,
+            "unattempted": 0,
+            "violations": []
+        })
+
+    answers = Answer.objects.filter(attempt=attempt)
+
+    total_questions = TestQuestion.objects.filter(test=test).count()
+
+    correct = answers.filter(is_correct=True).count()
+    attempted = answers.count()
+
+    wrong = attempted - correct
+    unattempted = total_questions - attempted
+
+    accuracy = 0
+    if total_questions > 0:
+        accuracy = round((correct / total_questions) * 100, 2)
+
+    violations = CandidateActivity.objects.filter(
+        attempt=attempt
+    ).order_by("timestamp")[:3]
+
+    from django.db.models import Count
+
+    violation_summary = CandidateActivity.objects.filter(
+        attempt=attempt
+    ).order_by("timestamp")[:3].values("activity_type").annotate(count=Count("activity_type"))
+    
+    webcam_images = WebcamCapture.objects.filter(
+        attempt=attempt
+    ).order_by("-timestamp")
+
+    return render(request, "candidate_report.html", {
+        "candidate": test.user.username,
+        "test": test.blueprint.name,
+        "score": correct,
+        "total": total_questions,
+        "accuracy": accuracy,
+        "correct": correct,
+        "wrong": wrong,
+        "unattempted": unattempted,
+        "violations": violations,
+        "violation_summary": violation_summary,
+        "webcam_images": webcam_images
+    })
+
+
+@csrf_exempt
+def save_webcam_frame(request):
+
+    if request.method == "POST":
+
+        attempt_id = request.POST.get("attempt_id")
+        image = request.FILES.get("image")
+
+        attempt = Attempt.objects.get(id=attempt_id)
+
+        WebcamCapture.objects.create(
+            attempt=attempt,
+            image=image
+        )
+
+        return JsonResponse({"status": "saved"})
+
+    return JsonResponse({"message": "invalid request"})

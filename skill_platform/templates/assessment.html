@@ -32,22 +32,26 @@
 <label>
 <input type="radio" name="q{{ question.id }}" value="a">
 {{ question.option_a }}
-</label><br>
+</label>
+<br>
 
 <label>
 <input type="radio" name="q{{ question.id }}" value="b">
 {{ question.option_b }}
-</label><br>
+</label>
+<br>
 
 <label>
 <input type="radio" name="q{{ question.id }}" value="c">
 {{ question.option_c }}
-</label><br>
+</label>
+<br>
 
 <label>
 <input type="radio" name="q{{ question.id }}" value="d">
 {{ question.option_d }}
-</label><br>
+</label>
+<br>
 
 <hr>
 
@@ -57,22 +61,24 @@
 
 </form>
 
+
+
+<!-- ================= TIMER ================= -->
+
 <script>
 
 let endTimeString = document.getElementById("endTime").value;
 let endTime = new Date(endTimeString).getTime();
-
 let display = document.getElementById("timer");
 
-function startTimer() {
+function startTimer(){
 
-let interval = setInterval(function () {
+let interval = setInterval(function(){
 
 let now = new Date().getTime();
-
 let remaining = endTime - now;
 
-if (remaining <= 0) {
+if(remaining <= 0){
 
 clearInterval(interval);
 
@@ -89,18 +95,391 @@ return;
 let minutes = Math.floor((remaining / 1000) / 60);
 let seconds = Math.floor((remaining / 1000) % 60);
 
-minutes = minutes < 10 ? "0" + minutes : minutes;
-seconds = seconds < 10 ? "0" + seconds : seconds;
+minutes = minutes < 10 ? "0"+minutes : minutes;
+seconds = seconds < 10 ? "0"+seconds : seconds;
 
 display.textContent = minutes + ":" + seconds;
 
-}, 1000);
+},1000);
 
 }
 
 window.onload = startTimer;
 
 </script>
+
+
+
+<!-- ================= REAL TIME PROCTORING ================= -->
+
+<script>
+
+let maxWarnings = 3;
+let inactivityTime = 0;
+let examTerminated = false;
+
+// ===== MULTIPLE TAB DETECTION =====
+
+if(localStorage.getItem("exam_active")){
+
+increaseWarning("MULTIPLE_TAB_DETECTED");
+
+}else{
+
+localStorage.setItem("exam_active","true");
+
+}
+
+// ===== FORCE FULLSCREEN =====
+
+function enterFullscreen(){
+
+let elem = document.documentElement;
+
+if(elem.requestFullscreen){
+elem.requestFullscreen();
+}
+
+}
+
+window.onload = function(){
+
+enterFullscreen();
+
+};
+
+// ===== LOAD EXISTING WARNINGS =====
+
+let warningCount = sessionStorage.getItem("warningCount");
+
+if(!warningCount){
+warningCount = 0;
+}else{
+warningCount = parseInt(warningCount);
+}
+
+
+// ===== SEND ALERT TO BACKEND =====
+
+function sendActivity(type){
+
+fetch("/log-activity/",{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json"
+},
+
+body:JSON.stringify({
+attempt_id:"{{ attempt.id }}",
+activity_type:type
+})
+
+});
+
+}
+
+
+
+// ===== HANDLE WARNING =====
+
+function increaseWarning(activity){
+
+// stop if exam already ended
+if(examTerminated) return;
+
+warningCount++;
+
+sessionStorage.setItem("warningCount", warningCount);
+
+alert("Warning " + warningCount + "/" + maxWarnings + ": " + activity);
+
+sendActivity(activity);
+
+// if warning limit reached
+if(warningCount >= maxWarnings){
+
+examTerminated = true;   // lock system immediately
+sessionStorage.removeItem("warningCount");
+
+alert("Maximum warnings reached. Test will be submitted.");
+
+// stop further script execution
+document.removeEventListener("visibilitychange", ()=>{});
+window.removeEventListener("blur", ()=>{});
+
+// submit exam or redirect
+let examForm = document.getElementById("examForm");
+
+if(examForm){
+examForm.submit();
+}else{
+window.location.replace("/finish-test/{{ attempt.id }}/");
+}
+
+}
+
+}
+
+
+
+// ===== TAB SWITCH =====
+
+document.addEventListener("visibilitychange",function(){
+
+if(examTerminated) return;
+
+if(document.hidden){
+
+increaseWarning("TAB_SWITCH");
+
+}
+
+});
+
+
+
+// ===== WINDOW BLUR =====
+
+window.addEventListener("blur",function(){
+
+if(examTerminated) return;
+
+increaseWarning("WINDOW_BLUR");
+
+});
+
+
+
+// ===== FULLSCREEN EXIT =====
+
+document.addEventListener("fullscreenchange",function(){
+
+if(examTerminated) return;
+
+if(!document.fullscreenElement){
+
+increaseWarning("FULLSCREEN_EXIT");
+
+setTimeout(function(){
+
+enterFullscreen();
+
+},1000);
+
+}
+
+});
+
+
+
+// ===== BLOCK PAGE REFRESH =====
+
+document.addEventListener("keydown",function(event){
+
+if(examTerminated) return;
+
+if(event.key==="F5"){
+
+event.preventDefault();
+
+increaseWarning("PAGE_REFRESH");
+
+}
+
+if(event.ctrlKey && event.key==="r"){
+
+event.preventDefault();
+
+increaseWarning("PAGE_REFRESH");
+
+}
+
+});
+
+
+
+// ===== PAGE CLOSE / RELOAD =====
+
+window.addEventListener("beforeunload",function(){
+
+localStorage.removeItem("exam_active");
+
+if(examTerminated) return;
+
+sendActivity("PAGE_REFRESH");
+
+});
+
+
+// ===== INACTIVITY DETECTION =====
+
+setInterval(function(){
+
+if(examTerminated) return;
+
+inactivityTime++;
+
+if(inactivityTime > 30){
+
+increaseWarning("INACTIVE");
+
+inactivityTime = 0;
+
+}
+
+},1000);
+
+
+document.addEventListener("mousemove", resetTimer);
+document.addEventListener("keypress", resetTimer);
+
+function resetTimer(){
+
+inactivityTime = 0;
+
+}
+
+
+
+// ===== DEVTOOLS DETECTION =====
+
+setInterval(function(){
+
+if(examTerminated) return;
+
+let threshold = 160;
+
+if(window.outerWidth - window.innerWidth > threshold ||
+   window.outerHeight - window.innerHeight > threshold){
+
+increaseWarning("DEVTOOLS_OPEN");
+
+}
+
+},2000);
+
+// ===== DISABLE RIGHT CLICK =====
+
+document.addEventListener("contextmenu", function(event){
+
+event.preventDefault();
+
+increaseWarning("RIGHT_CLICK_BLOCKED");
+
+});
+
+
+
+// ===== DISABLE COPY =====
+
+document.addEventListener("copy", function(event){
+
+event.preventDefault();
+
+increaseWarning("COPY_ATTEMPT");
+
+});
+
+
+
+// ===== DISABLE PASTE =====
+
+document.addEventListener("paste", function(event){
+
+event.preventDefault();
+
+increaseWarning("PASTE_ATTEMPT");
+
+});
+
+
+
+// ===== DISABLE TEXT SELECTION =====
+
+document.addEventListener("selectstart", function(event){
+
+event.preventDefault();
+
+});
+
+</script>
+
+
+</body>
+</html>
+
+
+
+// ===== BLOCK PAGE REFRESH =====
+
+document.addEventListener("keydown",function(event){
+
+if(examTerminated) return;
+
+if(event.key==="F5"){
+
+event.preventDefault();
+
+increaseWarning("PAGE_REFRESH");
+
+}
+
+if(event.ctrlKey && event.key==="r"){
+
+event.preventDefault();
+
+increaseWarning("PAGE_REFRESH");
+
+}
+
+});
+
+
+
+// ===== PAGE CLOSE / RELOAD DETECTION =====
+
+window.addEventListener("beforeunload",function(){
+
+if(examTerminated) return;
+
+sendActivity("PAGE_REFRESH");
+
+});
+
+
+
+// ===== INACTIVITY MONITOR =====
+
+setInterval(function(){
+
+if(examTerminated) return;
+
+inactivityTime++;
+
+if(inactivityTime > 30){
+
+increaseWarning("INACTIVE");
+
+inactivityTime = 0;
+
+}
+
+},1000);
+
+
+document.addEventListener("mousemove", resetTimer);
+document.addEventListener("keypress", resetTimer);
+
+function resetTimer(){
+
+inactivityTime = 0;
+
+}
+
+</script>
+
 
 </body>
 </html>
